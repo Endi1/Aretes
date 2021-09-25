@@ -21,8 +21,13 @@ import           System.IO                      ( FilePath
 import           Text.Pandoc
 import           GHC.Base                       ( returnIO )
 import           GHC.IO.Handle.FD               ( openFile )
-import           Text.Pandoc.Lua                ( Global(PANDOC_SCRIPT_FILE) )
+import           Text.Blaze.Html5               ( docTypeHtml
+                                                , body
+                                                )
+import           Text.Blaze.Html.Renderer.Text
 import qualified Data.Text.IO                  as DTIO
+import           Data.Text.Lazy                 ( toStrict )
+import           Text.Pandoc.Templates          ( getDefaultTemplate )
 
 getPostName :: FilePath -> FilePath
 getPostName postFileName = unpack $ dropEnd 3 $ pack postFileName
@@ -40,9 +45,13 @@ compilePosts (x : xs) = do
   contents   <- pack <$> hGetContents readHandle
   result     <- runIO $ do
     doc <- readMarkdown def contents
-    writeHtml5String def doc
+    writeHtml5 def doc
   rst <- handleError result
-  DTIO.writeFile ("./dist/" ++ getPostName x ++ "/" ++ "index.html") rst
+  DTIO.writeFile ("./dist/" ++ getPostName x ++ "/" ++ "index.html")
+    $ toStrict
+    $ renderHtml
+    $ docTypeHtml
+    $ body rst
   return ()
  where
   getPostName :: FilePath -> [Char]

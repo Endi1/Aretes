@@ -20,4 +20,5 @@ executable aretes
   build-depends:       base >= 4.7 && < 5,
                        pandoc,
                        directory,
-                       text
+                       text,
+                       blaze-html
