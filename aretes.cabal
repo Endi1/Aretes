@@ -21,4 +21,5 @@ executable aretes
                        pandoc,
                        directory,
                        text,
-                       blaze-html
+                       blaze-html,
+                       pandoc-types
