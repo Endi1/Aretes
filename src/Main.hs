@@ -28,6 +28,8 @@ import           Text.Blaze.Html5               ( docTypeHtml
                                                 , head
                                                 , title
                                                 , toHtml
+                                                , meta
+                                                , link
                                                 )
 import           Text.Blaze.Html.Renderer.Text
 import qualified Data.Text.IO                  as DTIO
@@ -38,6 +40,14 @@ import           Text.Pandoc.Shared             ( stringify )
 import           GHC.IO                         ( FilePath )
 import           System.Directory.Internal.Prelude
                                                 ( FilePath )
+import           Text.Blaze.Html5.Attributes    ( name
+                                                , content
+                                                , href
+                                                , rel
+                                                )
+import           Text.Blaze.Html                ( (!) )
+import           Types                          ( Post(..) )
+import           Templates.Index                ( index )
 
 getPostTitle :: Pandoc -> [Text]
 getPostTitle = query titleExtractor
@@ -49,16 +59,10 @@ getPostTitle = query titleExtractor
 getPostName :: FilePath -> FilePath
 getPostName postFileName = unpack $ dropEnd 3 $ pack postFileName
 
-startCompilingPosts :: IO ()
-startCompilingPosts = do
-  posts    <- listDirectory "./posts"
-  contents <- compilePosts $ map ("./posts/" ++) posts
-  print contents
-
-compilePosts :: [FilePath] -> IO ()
+compilePosts :: [Post] -> IO ()
 compilePosts []       = return ()
-compilePosts (x : xs) = do
-  readHandle <- openFile x ReadMode
+compilePosts (p : ps) = do
+  readHandle <- openFile (markdownPath p) ReadMode
   contents   <- pack <$> hGetContents readHandle
   resultE    <- runIO $ do
     doc <- readMarkdown def contents
@@ -69,15 +73,20 @@ compilePosts (x : xs) = do
 
   rst       <- handleError resultE
   postTitle <- handleError postTitleE
-  DTIO.writeFile ("./dist/" ++ getPostName x ++ "/" ++ "index.html")
+  DTIO.writeFile (compilePath p ++ "/" ++ "index.html")
     $ toStrict
     $ renderHtml
     $ docTypeHtml
     $ do
         Text.Blaze.Html5.head $ do
           title $ toHtml $ Prelude.head postTitle
+          meta ! name "viewport" ! content
+            "width=device-width, initial-scale=1.0"
+          link
+            ! href "https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css"
+            ! rel "stylesheet"
         body rst
-  compilePosts xs
+  compilePosts ps
  where
   getPostName :: FilePath -> [Char]
   getPostName postFilePath = drop 7 $ unpack $ dropEnd 3 $ pack postFilePath
@@ -90,10 +99,20 @@ compilePost postContent = do
   handleError result
 
 
-createPostsFolders :: IO ()
-createPostsFolders = do
-  posts <- listDirectory "./posts"
-  mapM_ (\filename -> createDirectory $ "./dist/" ++ getPostName filename) posts
+createPostsFolders :: [Post] -> IO ()
+createPostsFolders posts = do
+  mapM_ (createDirectory . compilePath) posts
+
+buildPosts :: IO [Post]
+buildPosts = do
+  postMarkdownFiles <- listDirectory "./posts"
+  return $ map
+    (\filename -> Post { postTitle    = pack $ getPostName filename
+                       , markdownPath = "./posts/" ++ filename
+                       , compilePath  = "./dist/" ++ getPostName filename
+                       }
+    )
+    postMarkdownFiles
 
 copyDirectoryRecursive :: FilePath -> FilePath -> [FilePath] -> IO ()
 copyDirectoryRecursive src dist []                          = return ()
@@ -118,10 +137,20 @@ copyStaticFolderContents = do
   createDirectory "./dist/static"
   copyDirectoryRecursive "static" "dist/static" staticRootContents
 
-copyFilesToDist :: IO ()
-copyFilesToDist =
-  let filesToCopy = ["index.html"]
-  in  mapM_ (\filename -> copyFile filename ("./dist/" ++ filename)) filesToCopy
+-- copyFilesToDist :: IO ()
+-- copyFilesToDist =
+--   let filesToCopy = ["index.html"]
+--   in  mapM_ (\filename -> copyFile filename ("./dist/" ++ filename)) filesToCopy
+
+compileStaticFiles :: [Post] -> IO ()
+compileStaticFiles posts =
+  let filesToCompile = [("index.html", index)]
+  in  mapM_
+        (\(filename, template) ->
+          DTIO.writeFile ("./dist/" ++ filename) $ toStrict $ renderHtml
+            (index posts)
+        )
+        filesToCompile
 
 createDistDirectory :: IO ()
 createDistDirectory = do
@@ -139,10 +168,11 @@ main :: IO ()
 main = do
   correctDir <- checkCorrectDirectory
   if correctDir
-    then
+    then do
       createDistDirectory
-      >> copyFilesToDist
-      >> copyStaticFolderContents
-      >> createPostsFolders
-      >> startCompilingPosts
+      copyStaticFolderContents
+      posts <- buildPosts
+      compileStaticFiles posts
+      createPostsFolders posts
+      compilePosts posts
     else putStrLn "aretes.dhall is missing"

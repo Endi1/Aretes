@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./src/Main.hs"
+      component: "aretes:exe:aretes"
+
+    - path: "./src/Templates.Index.hs"
+      component: "aretes:exe:aretes"
+
+    - path: "./src/Types.hs"
+      component: "aretes:exe:aretes"
