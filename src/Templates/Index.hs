@@ -26,5 +26,5 @@ index posts = do
     ul $ forM_
       posts
       (\post ->
-        li $ a ! href (stringValue $ compilePath post) $ toHtml $ postTitle post
+        li $ a ! href (textValue $ postFileName post) $ toHtml $ postTitle post
       )

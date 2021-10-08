@@ -30,6 +30,7 @@ import           Text.Blaze.Html5               ( docTypeHtml
                                                 , toHtml
                                                 , meta
                                                 , link
+                                                , Html
                                                 )
 import           Text.Blaze.Html.Renderer.Text
 import qualified Data.Text.IO                  as DTIO
@@ -48,6 +49,7 @@ import           Text.Blaze.Html5.Attributes    ( name
 import           Text.Blaze.Html                ( (!) )
 import           Types                          ( Post(..) )
 import           Templates.Index                ( index )
+import           Data.Text.IO                   ( writeFile )
 
 getPostTitle :: Pandoc -> [Text]
 getPostTitle = query titleExtractor
@@ -59,10 +61,15 @@ getPostTitle = query titleExtractor
 getPostName :: FilePath -> FilePath
 getPostName postFileName = unpack $ dropEnd 3 $ pack postFileName
 
-compilePosts :: [Post] -> IO ()
-compilePosts []       = return ()
+buildPosts :: IO [Post]
+buildPosts = do
+  postMarkdownFiles <- listDirectory "./posts"
+  compilePosts postMarkdownFiles
+
+compilePosts :: [FilePath] -> IO [Post]
+compilePosts []       = return []
 compilePosts (p : ps) = do
-  readHandle <- openFile (markdownPath p) ReadMode
+  readHandle <- openFile ("./posts/" ++ p) ReadMode
   contents   <- pack <$> hGetContents readHandle
   resultE    <- runIO $ do
     doc <- readMarkdown def contents
@@ -71,25 +78,35 @@ compilePosts (p : ps) = do
     doc <- readMarkdown def contents
     return $ getPostTitle doc
 
-  rst       <- handleError resultE
-  postTitle <- handleError postTitleE
-  DTIO.writeFile (compilePath p ++ "/" ++ "index.html")
-    $ toStrict
-    $ renderHtml
-    $ docTypeHtml
-    $ do
-        Text.Blaze.Html5.head $ do
-          title $ toHtml $ Prelude.head postTitle
-          meta ! name "viewport" ! content
-            "width=device-width, initial-scale=1.0"
-          link
-            ! href "https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css"
-            ! rel "stylesheet"
-        body rst
-  compilePosts ps
+  rst         <- handleError resultE
+  postTitle   <- handleError postTitleE
+  restOfPosts <- compilePosts ps
+  return
+    $ Post { postFileName     = pack $ getPostName p
+           , markdownPath     = "./posts/" ++ p
+           , compilePath      = "./dist/" ++ getPostName p
+           , postTitle        = Prelude.head postTitle
+           , compiledPostBody = getRenderedBody postTitle rst
+           }
+
+    : restOfPosts
  where
-  getPostName :: FilePath -> [Char]
-  getPostName postFilePath = drop 7 $ unpack $ dropEnd 3 $ pack postFilePath
+  getRenderedBody :: [Text] -> Html -> Text
+  getRenderedBody postTitle rst = toStrict $ renderHtml $ docTypeHtml $ do
+    Text.Blaze.Html5.head $ do
+      title $ toHtml $ Prelude.head postTitle
+      meta ! name "viewport" ! content "width=device-width, initial-scale=1.0"
+      link ! href "https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" ! rel
+        "stylesheet"
+    body rst
+
+writePosts :: [Post] -> IO ()
+writePosts []       = return ()
+writePosts (p : ps) = do
+  Data.Text.IO.writeFile (compilePath p ++ "/" ++ "index.html")
+                         (compiledPostBody p)
+  writePosts ps
+
 
 compilePost :: Text -> IO Text
 compilePost postContent = do
@@ -98,21 +115,9 @@ compilePost postContent = do
     writeRST def doc
   handleError result
 
-
 createPostsFolders :: [Post] -> IO ()
 createPostsFolders posts = do
   mapM_ (createDirectory . compilePath) posts
-
-buildPosts :: IO [Post]
-buildPosts = do
-  postMarkdownFiles <- listDirectory "./posts"
-  return $ map
-    (\filename -> Post { postTitle    = pack $ getPostName filename
-                       , markdownPath = "./posts/" ++ filename
-                       , compilePath  = "./dist/" ++ getPostName filename
-                       }
-    )
-    postMarkdownFiles
 
 copyDirectoryRecursive :: FilePath -> FilePath -> [FilePath] -> IO ()
 copyDirectoryRecursive src dist []                          = return ()
@@ -136,11 +141,6 @@ copyStaticFolderContents = do
   staticRootContents <- listDirectory "./static"
   createDirectory "./dist/static"
   copyDirectoryRecursive "static" "dist/static" staticRootContents
-
--- copyFilesToDist :: IO ()
--- copyFilesToDist =
---   let filesToCopy = ["index.html"]
---   in  mapM_ (\filename -> copyFile filename ("./dist/" ++ filename)) filesToCopy
 
 compileStaticFiles :: [Post] -> IO ()
 compileStaticFiles posts =
@@ -174,5 +174,5 @@ main = do
       posts <- buildPosts
       compileStaticFiles posts
       createPostsFolders posts
-      compilePosts posts
+      writePosts posts
     else putStrLn "aretes.dhall is missing"

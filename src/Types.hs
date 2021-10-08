@@ -6,7 +6,9 @@ where
 import           Data.Text
 
 data Post = Post {
-    postTitle :: Text,
+    postFileName :: Text,
     markdownPath :: FilePath,
-    compilePath :: FilePath
+    compilePath :: FilePath,
+    postTitle :: Text,
+    compiledPostBody :: Text
 }
