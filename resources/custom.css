@@ -1,0 +1,15 @@
+body {position: relative; min-height: 100vh;}
+body::after {
+  content: '';
+  display: block;
+  height: 50px; /* Set same as footer's height */
+}
+
+footer {
+    position: absolute;
+    bottom: 0;
+    height: 50px;
+}
+footer ul {
+    list-style: none;
+}

@@ -12,13 +12,20 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
+data-files:          resources/ganalytics.js
+                     resources/bamboo.min.css
+                     resources/custom.css
 
 executable aretes
   hs-source-dirs:      src
   main-is:             Main.hs
   other-modules:       Templates.Index,
+                       Templates.Post,
+                       Templates.Mixins,
                        Types
   default-language:    Haskell2010
+  autogen-modules:     Paths_aretes
+  other-modules:       Paths_aretes
   build-depends:       base >= 4.7 && < 5,
                        pandoc,
                        directory,

@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Control.Monad                  ( void )
 import           System.Directory               ( listDirectory
                                                 , removeDirectoryRecursive
                                                 , createDirectory
@@ -20,20 +19,20 @@ import           System.IO                      ( FilePath
                                                 , IOMode(ReadMode, WriteMode)
                                                 , hGetContents
                                                 )
-import           Text.Pandoc
+import           Text.Pandoc                    ( writeRST
+                                                , handleError
+                                                , writeHtml5
+                                                , readMarkdown
+                                                , runIO
+                                                , def
+                                                , Block(Header)
+                                                , Pandoc
+                                                )
 import           GHC.Base                       ( returnIO )
 import           GHC.IO.Handle.FD               ( openFile )
-import           Text.Blaze.Html5               ( docTypeHtml
-                                                , body
-                                                , head
-                                                , title
-                                                , toHtml
-                                                , meta
-                                                , link
-                                                , Html
-                                                )
-import           Text.Blaze.Html.Renderer.Text
+import           Text.Blaze.Html.Renderer.Text  ( renderHtml )
 import qualified Data.Text.IO                  as DTIO
+                                                ( writeFile )
 import           Data.Text.Lazy                 ( toStrict )
 import           Text.Pandoc.Templates          ( getDefaultTemplate )
 import           Text.Pandoc.Walk
@@ -41,15 +40,10 @@ import           Text.Pandoc.Shared             ( stringify )
 import           GHC.IO                         ( FilePath )
 import           System.Directory.Internal.Prelude
                                                 ( FilePath )
-import           Text.Blaze.Html5.Attributes    ( name
-                                                , content
-                                                , href
-                                                , rel
-                                                )
-import           Text.Blaze.Html                ( (!) )
 import           Types                          ( Post(..) )
 import           Templates.Index                ( index )
-import           Data.Text.IO                   ( writeFile )
+import           Templates.Post                 ( post )
+import           Paths_aretes
 
 getPostTitle :: Pandoc -> [Text]
 getPostTitle = query titleExtractor
@@ -84,27 +78,17 @@ compilePosts (p : ps) = do
   return
     $ Post { postFileName     = pack $ getPostName p
            , markdownPath     = "./posts/" ++ p
-           , compilePath      = "./dist/" ++ getPostName p
+           , compilePath      = "./docs/" ++ getPostName p
            , postTitle        = Prelude.head postTitle
-           , compiledPostBody = getRenderedBody postTitle rst
+           , compiledPostBody = post (Prelude.head postTitle) rst
            }
 
     : restOfPosts
- where
-  getRenderedBody :: [Text] -> Html -> Text
-  getRenderedBody postTitle rst = toStrict $ renderHtml $ docTypeHtml $ do
-    Text.Blaze.Html5.head $ do
-      title $ toHtml $ Prelude.head postTitle
-      meta ! name "viewport" ! content "width=device-width, initial-scale=1.0"
-      link ! href "https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css" ! rel
-        "stylesheet"
-    body rst
 
 writePosts :: [Post] -> IO ()
 writePosts []       = return ()
 writePosts (p : ps) = do
-  Data.Text.IO.writeFile (compilePath p ++ "/" ++ "index.html")
-                         (compiledPostBody p)
+  DTIO.writeFile (compilePath p ++ "/" ++ "index.html") (compiledPostBody p)
   writePosts ps
 
 
@@ -139,15 +123,15 @@ copyDirectoryRecursive src dist (currentFile : restOfFiles) = do
 copyStaticFolderContents :: IO ()
 copyStaticFolderContents = do
   staticRootContents <- listDirectory "./static"
-  createDirectory "./dist/static"
-  copyDirectoryRecursive "static" "dist/static" staticRootContents
+  createDirectory "./docs/static"
+  copyDirectoryRecursive "static" "docs/static" staticRootContents
 
 compileStaticFiles :: [Post] -> IO ()
 compileStaticFiles posts =
   let filesToCompile = [("index.html", index)]
   in  mapM_
         (\(filename, template) ->
-          DTIO.writeFile ("./dist/" ++ filename) $ toStrict $ renderHtml
+          DTIO.writeFile ("./docs/" ++ filename) $ toStrict $ renderHtml
             (index posts)
         )
         filesToCompile
@@ -155,9 +139,9 @@ compileStaticFiles posts =
 createDistDirectory :: IO ()
 createDistDirectory = do
   contents <- listDirectory "."
-  if "dist" `elem` contents
-    then removeDirectoryRecursive "dist" >> createDirectory "dist"
-    else createDirectory "dist"
+  if "docs" `elem` contents
+    then removeDirectoryRecursive "docs" >> createDirectory "docs"
+    else createDirectory "docs"
 
 checkCorrectDirectory :: IO Bool
 checkCorrectDirectory = do
@@ -170,6 +154,14 @@ main = do
   if correctDir
     then do
       createDistDirectory
+      createDirectory "./docs/js"
+      createDirectory "./docs/css"
+      jsFileLocation        <- getDataFileName "resources/ganalytics.js"
+      cssFileLocation       <- getDataFileName "resources/bamboo.min.css"
+      customCssFileLocation <- getDataFileName "resources/custom.css"
+      copyFile jsFileLocation        "./docs/js/ganalytics.js"
+      copyFile cssFileLocation       "./docs/css/bamboo.min.css"
+      copyFile customCssFileLocation "./docs/css/custom.css"
       copyStaticFolderContents
       posts <- buildPosts
       compileStaticFiles posts
