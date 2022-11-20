@@ -29,7 +29,6 @@ import           Text.Pandoc                    ( writeRST
                                                 , Pandoc
                                                 )
 import           GHC.Base                       ( returnIO )
-import           GHC.IO.Handle.FD               ( openFile )
 import           Text.Blaze.Html.Renderer.Text  ( renderHtml )
 import qualified Data.Text.IO                  as DTIO
                                                 ( writeFile )
